@@ -29,7 +29,7 @@ Mount `dsh-agent-loop` in any composition that should run agents. It supplies th
 
 ### Configure declarative agents
 
-Agents declared in the config start automatically when the plugin loads. Each entry needs an `id` label; a model call additionally requires both `provider` and `model` (`agent/request` may supply a missing pair before dispatch).
+Agents declared in the config start automatically when the plugin loads. Each entry needs an `id` label. Fresh agents fill missing `provider` or `model` fields from the optional `agentDefaultModel` service; without that service, `agent/request` may supply the missing pair before dispatch. Explicit route fields remain authoritative.
 
 ```yaml
 - name: '@deepseek-ai/dsh-agent-loop'
@@ -59,6 +59,8 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 ### Create or resume agents programmatically
 
 Plugins and hosts create agents through `ctx.agents.create()` and resume persisted sessions through `ctx.agents.resume()`; both return an `AgentHandle` whose `dispose()` owns exact teardown. The loop runs each created agent to completion — the handle is only needed when the caller must tear the agent down itself.
+
+Fresh agents sample `agentDefaultModel.currentSelection()` once when a provider or model field is absent. The selected values become the agent's initial options before prompt assembly, so prompt variables and the first request use the same route. An explicit field wins, and a missing default service leaves route selection to `agent/request`; resuming a persisted session does not replace its route with the current deployment default.
 
 ```text
 const handle = await ctx.agents.create({

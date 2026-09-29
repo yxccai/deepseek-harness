@@ -464,6 +464,27 @@ describe('adapter registration, routing, and accepted-input ownership', () => {
       : undefined).toContain('agent/request')
   })
 
+  it('fresh agents fill missing route fields from the optional default model', async () => {
+    const adapter = new MockAdapter([textResponse('defaulted')])
+    const ctx = await harness(adapter)
+    ctx.provide('agentDefaultModel', {
+      currentSelection: () => ({ provider: 'mock', model: 'deployment-default' }),
+    })
+    const { agent } = await ctx.agents.create({
+      sessionId: SessionId('default-model'),
+      agentOptions: { provider: 'mock' },
+    })
+
+    expect(agent.options).toMatchObject({ provider: 'mock', model: 'deployment-default' })
+    send(agent, 'go')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.provider).toBe('mock')
+    expect(adapter.requests[0]?.model).toBe('deployment-default')
+    expect(agent.session.deriveMessages().at(-1)?.content).toEqual([{ type: 'text', text: 'defaulted' }])
+  })
+
   it('the agent/request waterfall can supply the model for a model-less agent', async () => {
     const adapter = new MockAdapter([textResponse('routed')])
     const ctx = await harness(adapter)

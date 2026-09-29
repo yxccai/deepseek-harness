@@ -16,6 +16,7 @@ import type {
   AgentFactory,
   AgentHandle,
   AgentOptions,
+  ModelSelection,
   AgentSetup,
   CreateAgentOptions,
   ResumeAgentOptions,
@@ -192,6 +193,31 @@ function assertAgentOptions(options: AgentOptions): void {
   if (options.maxTokens !== undefined
     && (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0)) {
     throw new TypeError('agent maxTokens must be a positive safe integer')
+  }
+}
+
+/** Service contract read through the optional agentDefaultModel capability. */
+interface AgentDefaultModelService {
+  currentSelection(): ModelSelection
+}
+
+/**
+ * Fill missing route fields for a fresh Agent from the deployment default.
+ * Explicit fields remain authoritative, and an absent service leaves routing
+ * to the agent/request waterfall.
+ */
+function resolveDefaultAgentOptions(ctx: Context, options: AgentOptions): AgentOptions {
+  if (options.provider !== undefined && options.model !== undefined) return options
+  const defaultModel = ctx.get('agentDefaultModel') as AgentDefaultModelService | undefined
+  if (defaultModel === undefined) return options
+  const selected = defaultModel.currentSelection()
+  return {
+    ...options,
+    provider: options.provider ?? selected.provider,
+    model: options.model ?? selected.model,
+    ...options.reasoningEffort === undefined && selected.reasoningEffort !== undefined
+      ? { reasoningEffort: selected.reasoningEffort }
+      : {},
   }
 }
 
@@ -654,7 +680,14 @@ export class AgentLoop extends Service implements AgentFactory {
     const stored = await this.createStoredSession(preparation.session)
     let prepared: PreparedAgent
     try {
-      prepared = this.prepare(this.ctx, id, options, preparation.session, undefined, stored?.handle)
+      prepared = this.prepare(
+        this.ctx,
+        id,
+        resolveDefaultAgentOptions(this.runtime.ctx, options),
+        preparation.session,
+        undefined,
+        stored?.handle,
+      )
     } catch (error: unknown) {
       await stored?.handle.close().catch(() => {})
       throw error
@@ -738,7 +771,7 @@ export class AgentLoop extends Service implements AgentFactory {
         ownerCtx,
         options.sessionId,
         preparation,
-        options.agentOptions ?? {},
+        resolveDefaultAgentOptions(this.runtime.ctx, options.agentOptions ?? {}),
         options.setup,
         options.signal,
         'startup',

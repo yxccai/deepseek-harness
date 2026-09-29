@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 配置声明式 agent
 
-配置中声明的 agent 会在插件加载时自动启动。每个条目需要一个 `id` 标签；模型调用还同时需要 `provider` 与 `model`（`agent/request` 可以在分发前补齐缺失的这一对值）。
+配置中声明的 agent 会在插件加载时自动启动。每个条目需要一个 `id` 标签。新建 agent 缺少 `provider` 或 `model` 时，会从可选的 `agentDefaultModel` 服务补齐；未挂载该服务时，`agent/request` 仍可在分发前补齐缺失的路由字段。显式传入的字段优先。
 
 ```yaml
 - name: '@deepseek-ai/dsh-agent-loop'
@@ -59,6 +59,8 @@ kind: "package-reference"
 ### 以编程方式创建或恢复 agent
 
 插件与宿主通过 `ctx.agents.create()` 创建 agent，通过 `ctx.agents.resume()` 恢复持久化会话；两者都返回 `AgentHandle`，其 `dispose()`（资源释放）负责精确拆除对应的 agent。循环会把每个创建的 agent 运行到完成——只有调用方需要自行拆除 agent 时才需要句柄。
+
+新建 agent 在 provider 或 model 缺失时只读取一次 `agentDefaultModel.currentSelection()`。所选值会在提示词组装前写入 agent 的初始 options，因此提示词变量与首次请求使用同一路由。显式字段保持优先；未挂载默认服务时，路由仍由 `agent/request` 选择；恢复持久化会话不会用当前部署默认值替换已有路由。
 
 ```text
 const handle = await ctx.agents.create({
